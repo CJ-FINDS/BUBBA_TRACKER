@@ -56,8 +56,8 @@ const AGENT="JEDDAH MAE DESCARTIN";
 const HDR=["Agent Name","Voice Answered","Voice Answered AHT","Voice CSAT","Voice FCR","Voice Agent Resolution","Voice Answered Take Rate (calibrated)","Voice Answered Transfer to Survey % (calibrated)","Voice Handled Transfer % (calibrated)","Status - Pay to Performance","Voice Sentiment Trend Avg","Revenue - Bookings (Post Recoup)","Revenue - ACQ + CROSS (Post Recoup)","Revenue - REN (Post Recoup)"];
 const SAMPLE=["Jeddah Mae Descartin","198","1536","4.96","87.20%","92.30%","40.90%","61.10%","3.90%","88%","28.71","4739","2040","2700"];
 const PCT=["voicefcr","voiceagentresolution","voiceansweredtakeratecalibrated","voiceansweredtransfertosurveycalibrated","voicehandledtransfercalibrated","statuspaytoperformance"];
-let data=[HDR.slice(),SAMPLE.slice()],days={w:22,s:22};
-try{const d=JSON.parse(localStorage.getItem("ps_data")||"null");if(d&&d.length)data=d;const k=JSON.parse(localStorage.getItem("ps_days")||"null");if(k)days=k}catch(e){}
+let data=[HDR.slice(),SAMPLE.slice()],days={w:22,s:22,a:0,l:0};
+try{const d=JSON.parse(localStorage.getItem("ps_data")||"null");if(d&&d.length)data=d;const k=JSON.parse(localStorage.getItem("ps_days")||"null");if(k)days=Object.assign(days,k)}catch(e){}
 const save=()=>{try{localStorage.setItem("ps_data",JSON.stringify(data));localStorage.setItem("ps_days",JSON.stringify(days))}catch(e){}};
 const norm=s=>String(s==null?"":s).toLowerCase().replace(/[^a-z0-9]/g,"");
 const colIdx=n=>(data[0]||[]).findIndex(h=>norm(h)===norm(n));
@@ -83,7 +83,7 @@ function render(){
 document.getElementById("agent").textContent=AGENT;
 const ans=num("Voice Answered"),aht=num("Voice Answered AHT"),csat=num("Voice CSAT"),fcr=num("Voice FCR"),res=num("Voice Agent Resolution"),take=num("Voice Answered Take Rate (calibrated)"),trf=num("Voice Answered Transfer to Survey % (calibrated)"),pay=num("Status - Pay to Performance"),book=num("Revenue - Bookings (Post Recoup)"),acq=num("Revenue - ACQ + CROSS (Post Recoup)"),ren=num("Revenue - REN (Post Recoup)");
 document.getElementById("mtd").innerHTML="<thead><tr><th>METRIC</th><th style='text-align:right'>SCORE</th></tr></thead><tbody>"+
-row3("CALLS",N(ans))+row3("AHT",N(aht),undefined,ahtC(aht))+row3("CSAT",N(csat,2),undefined,lv(csat,4.93))+row3("VRR",P(res),undefined,lv(res,.94))+row3("FCR",P(take),undefined,lv(take,.33))+row3("XFER TO SURVEY",P(trf),undefined,xfC(trf))+row3("P2P",P(pay),undefined,lv(pay,.83))+"</tbody>";
+row3("CALLS",N(ans))+row3("AHT",N(aht),undefined,ahtC(aht))+row3("CSAT",N(csat,2),undefined,lv(csat,4.93))+row3("VRR",P(res),undefined,lv(res,.94))+row3("FCR",P(fcr))+row3("TAKE RATE",P(take),undefined,lv(take,.33))+row3("XFER TO SURVEY",P(trf),undefined,xfC(trf))+row3("TRANSFERS%",P(num("Voice Handled Transfer % (calibrated)")))+row3("P2P",P(pay),undefined,lv(pay,.83))+"</tbody>";
 const tot=ok(acq)&&ok(ren)?acq+ren:NaN,pc=ok(acq)&&ok(ans)&&ans?acq/ans:NaN;
 const miss=ok(pc)?(pc<9?9*ans-acq:0):NaN;
 let inc=NaN;if(ok(book)){inc=0;const K=[500,1000,2000,3000,3500,4000,4500,5000,5500,6000,6500,7000],V=[1750,3250,4750,5000,5100,5250,5750,6250,6500,7000,7500,8000];K.forEach((k,i)=>{if(book>=k)inc=V[i]})}
@@ -92,19 +92,24 @@ const q1=ok(take)&&ok(csat)&&ok(pc)?(take>=.33&&csat>=4.9&&pc>=9):null;
 document.getElementById("sales").innerHTML="<thead><tr><th>METRIC</th><th style='text-align:right'>VALUE</th></tr></thead><tbody>"+
 row3("ACQ",$(acq))+row3("RENEWAL",$(ren))+row3("TOTAL",$(tot))+
 row3("$/CALL",$(pc),undefined,lv(pc,9))+row3("Missing ACQ (target $9/call)",$(miss),undefined,lv(pc,9))+row3("INCENTIVES",$(inc))+row3("KICKER",$(kick))+row3("QUALIFIED?",badge(q1))+"</tbody>";
-const s=[sc.aht(aht),sc.csat(csat),sc.res(res),sc.trf(trf),sc.pay(pay)];
-const pcnt=s.every(ok)?s.reduce((a,b)=>a+b,0)/5:NaN;
+const s=[sc.aht(aht),sc.csat(csat),sc.res(res),sc.trf(num("Voice Handled Transfer % (calibrated)")),sc.pay(pay)];
+const abn=n=>n===0?1:n===1?.75:n===2?.5:0;
+const s7=s.concat([abn(days.a),abn(days.l)]);
+const pcnt=s7.every(ok)?s[1]*.2+s[0]*.25+s[2]*.25+s[4]*.15+s[3]*.05+s7[5]*.05+s7[6]*.05:NaN;
 const mult=days.s?days.w/days.s:NaN;
 const q2=ok(take)&&ok(csat)&&ok(pc)?(take>=.33&&csat>=4.9&&pc>=9):null;
 const sp=v=>ok(v)?Math.round(v*100)+"%":"—";
+const ab=n=>n===0?"100%":n===1?"75%":n===2?"50%":"0%";
 document.getElementById("kpi").innerHTML="<thead><tr><th>METRIC</th><th style='text-align:right'>ACTUAL</th><th style='text-align:right'>SCORE</th></tr></thead><tbody>"+
 `<tr><td>Days Worked</td><td class="v" colspan="2"><input class="edit" type="number" min="0" id="dw" value="${days.w}"></td></tr>`+
 `<tr><td>Days Scheduled</td><td class="v" colspan="2"><input class="edit" type="number" min="0" id="ds" value="${days.s}"></td></tr>`+
-row3("AHT",N(aht),sp(s[0]),ahtC(aht))+row3("CSAT",N(csat,2),sp(s[1]),lv(csat,4.93))+row3("VRR",P(res),sp(s[2]),lv(res,.94))+row3("XFER TO SURVEY",P(trf),sp(s[3]),xfC(trf))+row3("P2P",P(pay),sp(s[4]),lv(pay,.83))+
-row3("ABSENCE","","100%")+row3("LATE","","100%")+row3("MULTIPLIER","",sp(mult))+row3("PERCENTAGE","",sp(pcnt))+row3("QUALIFIED?","",badge(q2))+"</tbody>";
+row3("AHT",N(aht),sp(s[0]),ahtC(aht))+row3("CSAT",N(csat,2),sp(s[1]),lv(csat,4.93))+row3("VRR",P(res),sp(s[2]),lv(res,.94))+row3("TRANSFER%",P(num("Voice Handled Transfer % (calibrated)")),sp(s[3]))+row3("P2P",P(pay),sp(s[4]),lv(pay,.83))+
+`<tr><td>ABSENCE</td><td class="v"><input class="edit" type="number" min="0" id="da" value="${days.a}"></td><td class="v">${ab(days.a)}</td></tr>`+`<tr><td>LATE</td><td class="v"><input class="edit" type="number" min="0" id="dl" value="${days.l}"></td><td class="v">${ab(days.l)}</td></tr>`+row3("MULTIPLIER","",sp(mult))+row3("PERCENTAGE","",sp(pcnt))+row3("INITIAL KPI","",$((p=>ok(p)?(p>=.95?5250:p>=.9?5000:p>=.87?4500:p>=.85?2500:p>=.8?1975:0):NaN)(Math.round(pcnt*1e6)/1e6)))+row3("FINAL KPI","",$((p=>ok(p)&&ok(mult)?mult*(p>=.95?5250:p>=.9?5000:p>=.87?4500:p>=.85?2500:p>=.8?1975:0):NaN)(Math.round(pcnt*1e6)/1e6)))+row3("QUALIFIED?","",badge(q2))+"</tbody>";
 const dw=document.getElementById("dw"),ds=document.getElementById("ds");
 dw.oninput=()=>{days.w=parseFloat(dw.value)||0;save();render();document.getElementById("dw").focus()};
 ds.oninput=()=>{days.s=parseFloat(ds.value)||0;save();render();document.getElementById("ds").focus()};
+document.getElementById("da").oninput=e=>{days.a=Math.max(0,parseInt(e.target.value)||0);save();render();document.getElementById("da").focus()};
+document.getElementById("dl").oninput=e=>{days.l=Math.max(0,parseInt(e.target.value)||0);save();render();document.getElementById("dl").focus()};
 }
 const colName=c=>{let s="";c++;while(c>0){const m=(c-1)%26;s=String.fromCharCode(65+m)+s;c=Math.floor((c-1)/26)}return s};
 function grid(){
