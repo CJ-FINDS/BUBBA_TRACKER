@@ -158,7 +158,7 @@ const sheet=document.getElementById("sheet");
 sheet.addEventListener("input",e=>{const t=e.target;if(!t.dataset||t.dataset.r===undefined)return;const r=+t.dataset.r,c=+t.dataset.c;while(data.length<=r)data.push([]);data[r][c]=t.textContent;save("x");render()});
 sheet.addEventListener("paste",e=>{const t=e.target.closest("td[data-r]");if(!t)return;e.preventDefault();
 const txt=(e.clipboardData||window.clipboardData).getData("text");
-const rows=parseTSV(txt);
+const rows=clipRows(e);
 const r0=+t.dataset.r,c0=+t.dataset.c;
 if(r0===0&&c0===0)data=[];
 rows.forEach((cells,i)=>{while(data.length<=r0+i)data.push([]);cells.forEach((v,j)=>{data[r0+i][c0+j]=v.trim()})});
@@ -180,6 +180,34 @@ for(let i=0;i<t.length;i++){const ch=t[i];
  else f+=ch}
 if(f!==""||row.length){row.push(f);rows.push(row)}
 return rows}
+/* Paste reader: uses the clipboard's HTML table when present (like Excel does, keeps empty cells), else tab text, else one-cell-per-line text */
+const SURVEY_HEAD=["Agent Name","Reports to","Case ID","Knowledgeable rating","Courteous rating","FCR value","CSAT value","Comments","Date"];
+function parseFlat(txt){
+const L=txt.replace(/\r/g,"").split("\n").map(x=>x.trim()).filter(x=>x!=="");
+if(L.length<SURVEY_HEAD.length||!SURVEY_HEAD.every((h,i)=>norm(L[i])===norm(h)))return parseTSV(txt);
+const isNum=x=>/^\d+(\.\d+)?$/.test(x),isFcr=x=>/^(yes|no)\./i.test(x),isName=x=>/^[a-z]+\.[a-z]+$/i.test(x);
+const out=[SURVEY_HEAD.slice()];let i=SURVEY_HEAD.length;
+while(i<L.length){
+ if(!(isName(L[i])&&L[i+1]&&!isNum(L[i+1]))){i++;continue}
+ let j=i+1;while(j<L.length&&!(isName(L[j])&&L[j+1]&&!isNum(L[j+1])&&j>i+1))j++;
+ const rec=L.slice(i,j),agent=rec[0],rep=rec[1],cid=rec[2]||"",rest=rec.slice(3);
+ const di=rest.map(x=>/^\d+\/\d+\/\d+/.test(x)).lastIndexOf(true),date=di>=0?rest[di]:"",mid=di>=0?rest.slice(0,di):rest;
+ const fi=mid.findIndex(isFcr),fcr=fi>=0?mid[fi]:"";
+ const before=(fi>=0?mid.slice(0,fi):mid).filter(isNum),after=fi>=0?mid.slice(fi+1).filter(isNum):[];
+ let q1="",q2="",cs="";
+ if(fi>=0){q1=before[0]||"";q2=before[1]||"";cs=after[0]||""}
+ else if(before.length>=3){q1=before[0];q2=before[1];cs=before[2]}
+ else{q1=before[0]||"";q2=before[1]||""}
+ const cm=mid.filter(x=>!isNum(x)&&!isFcr(x)).join(" ");
+ out.push([agent,rep,cid,q1,q2,fcr,cs,cm,date]);i=j}
+return out}
+function clipRows(e){
+const cd=e.clipboardData||window.clipboardData,html=cd.getData("text/html");
+if(html&&/<t[dh][\s>]/i.test(html)){
+ const trs=[...new DOMParser().parseFromString(html,"text/html").querySelectorAll("tr")];
+ if(trs.length)return trs.map(tr=>{const o=[];[...tr.children].forEach(td=>{if(!/^t[dh]$/i.test(td.tagName))return;o.push((td.textContent||"").replace(/\s+/g," ").trim());for(let k=1;k<(parseInt(td.getAttribute("colspan"))||1);k++)o.push("")});return o})}
+const txt=cd.getData("text");
+return txt.includes("\t")?parseTSV(txt):parseFlat(txt)}
 const download=(obj,name,msg)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(obj)],{type:"application/json"}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);alert(name+" downloaded.\n\nUpload it to your GitHub repo (same folder as index.html) and replace the old "+name+". "+msg)};
 const isMe=s=>{const n=norm(s);return n.includes("jeddah")&&n.includes("descartin")};   // survey usernames like jeddah.descartin
 let xRows=30,xCols=40;
@@ -232,7 +260,7 @@ g("csModal").addEventListener("click",e=>{if(e.target===g("csModal"))csClose()})
 g("csSheet").addEventListener("input",e=>{const t=e.target;if(!t.dataset||t.dataset.r===undefined)return;const arr=cs[csTab],r=+t.dataset.r,k=+t.dataset.c;while(arr.length<=r)arr.push([]);arr[r][k]=t.textContent;csSave();csRender()});
 g("csSheet").addEventListener("paste",e=>{
 const t=e.target.closest("td[data-r]");if(!t)return;e.preventDefault();
-const rows=parseTSV((e.clipboardData||window.clipboardData).getData("text"));
+const rows=clipRows(e);
 const arr=cs[csTab],r0=+t.dataset.r,c0=+t.dataset.c;
 if(r0===0&&c0===0)arr.length=0;
 rows.forEach((cells,i)=>{while(arr.length<=r0+i)arr.push([]);cells.forEach((v,j)=>{arr[r0+i][c0+j]=String(v).trim()})});
