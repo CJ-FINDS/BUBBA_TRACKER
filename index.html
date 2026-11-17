@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Progress Stat</title>
 <style>
-:root{--bg1:#efe6ff;--bg2:#c9b3f5;--bg3:#a78bfa;--text:#2a1255;--muted:#5b3f99;--glass:rgba(255,255,255,.42);--edge:rgba(255,255,255,.7);--row:rgba(124,58,237,.10);--accent:#7c3aed;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root{--bg1:#efe6ff;--bg2:#c9b3f5;--bg3:#a78bfa;--text:#2a1255;--muted:#5b3f99;--glass:rgba(255,255,255,.42);--edge:rgba(255,255,255,.7);--row:rgba(124,58,237,.10);--accent:#7c3aed;--red:#9b2c2c;--redtext:#fff;color-scheme:light dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg1:#1a0b3a;--bg2:#3b1d7a;--bg3:#6d3fd1;--text:#f3ecff;--muted:#cbb6f5;--glass:rgba(255,255,255,.09);--edge:rgba(255,255,255,.2);--row:rgba(255,255,255,.06);--accent:#a78bfa}}
 :root[data-theme="dark"]{--bg1:#1a0b3a;--bg2:#3b1d7a;--bg3:#6d3fd1;--text:#f3ecff;--muted:#cbb6f5;--glass:rgba(255,255,255,.09);--edge:rgba(255,255,255,.2);--row:rgba(255,255,255,.06);--accent:#a78bfa}
 *{box-sizing:border-box}
@@ -20,10 +20,9 @@ th{font-size:11px;letter-spacing:.1em;color:var(--muted);font-weight:600;padding
 tbody td{background:var(--row)}tbody td:first-child{border-radius:10px 0 0 10px}tbody td:last-child{border-radius:0 10px 10px 0}
 td.v{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
 .yes,.no{display:inline-block;padding:3px 12px;border-radius:99px;font-weight:800;font-size:13px}
-.yes{background:#22c55e;color:#04210f}.no{background:#ef4444;color:#fff}
-tr.miss td{background:rgba(244,114,182,.8);color:#500724}
-tr.warn td{background:rgba(234,200,90,.55);color:#3d2e05}
-tr.red td{background:rgba(220,38,38,.85);color:#fff}
+.yes{background:#22c55e;color:#04210f}.no{background:var(--red);color:var(--redtext)}
+/* one uniform, muted red for every "below target" highlight */
+tr.miss td,tr.red td{background:var(--red);color:var(--redtext)}
 .edit{width:70px;text-align:right;font:inherit;font-weight:700;color:var(--text);background:rgba(255,255,255,.25);border:1px solid var(--edge);border-radius:8px;padding:3px 6px}
 .fab{position:fixed;right:max(20px,env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));width:58px;height:58px;border-radius:50%;border:1px solid var(--edge);background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;font-size:26px;cursor:pointer;box-shadow:0 8px 28px rgba(109,40,217,.5)}
 .modal{position:fixed;inset:0;background:rgba(20,5,50,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:5}
@@ -60,7 +59,7 @@ header{position:relative}
 .cst{min-width:560px}.cst.wide{min-width:760px}
 .cst th{text-align:center;vertical-align:bottom;padding:0 12px 6px;white-space:normal;line-height:1.3}
 .cst td,.cst td.v{text-align:center}
-.cst td.bad{background:rgba(220,38,38,.85);color:#fff}
+.cst td.bad{background:var(--red);color:var(--redtext)}
 .bar button.ghostb{background:transparent;border:1px solid var(--edge)}
 </style></head><body>
 <header><button class="switch left" id="toCsat">SWITCH CSAT VIEW</button><h1>PROGRESS STAT</h1><h2 class="agent" id="agent"></h2></header>
@@ -86,7 +85,11 @@ header{position:relative}
 <div><button id="csAddRows" class="ghostb">+ Rows</button><button id="csAddCols" class="ghostb">+ Cols</button><button id="csT1">Surveys</button><button id="csT2" class="ghostb">Calls</button><button id="csExport" class="ghostb" title="Download csat.json to publish for everyone">Export data</button><button id="csClear" class="ghostb">Clear</button><button id="csClose">Done</button></div></div>
 <div class="sheet" id="csSheet"></div></div></div>
 <script>
+const g=id=>document.getElementById(id);
 const AGENT="JEDDAH MAE DESCARTIN";
+/* ================= TARGETS: edit values here ================= */
+const T={take:.36,csat:4.9,vrr:.94,p2p:.85,aht:920,xferMax:.12,xferSurveyMin:.55,acq:9};   // acq = $/call target
+/* ============================================================== */
 const HDR=["Agent Name","Voice Answered","Voice Answered AHT","Voice CSAT","Voice FCR","Voice Agent Resolution","Voice Answered Take Rate (calibrated)","Voice Answered Transfer to Survey % (calibrated)","Voice Handled Transfer % (calibrated)","Status - Pay to Performance","Voice Sentiment Trend Avg","Revenue - Bookings (Post Recoup)","Revenue - ACQ + CROSS (Post Recoup)","Revenue - REN (Post Recoup)"];
 const SAMPLE=["Jeddah Mae Descartin","198","1536","4.96","87.20%","92.30%","40.90%","61.10%","3.90%","88%","28.71","4739","2040","2700"];
 const PCT=["voicefcr","voiceagentresolution","voiceansweredtakeratecalibrated","voiceansweredtransfertosurveycalibrated","voicehandledtransfercalibrated","statuspaytoperformance"];
@@ -108,42 +111,47 @@ csat:v=>tier(v,[[4.96,1.1],[4.93,1],[4.89,.9],[4.85,.8]],1,.5),
 res:v=>tier(v,[[.97,1.1],[.94,1],[.92,.9],[.9,.8],[.871,.7]],1,.5),
 trf:v=>tier(v,[[.12,1.1],[.129,1],[.139,.9],[.145,.8],[.149,.7]],-1,.5),
 pay:v=>tier(v,[[.87,1.1],[.83,1],[.8,.9],[.77,.8],[.75,.7],[.73,.6]],1,.5)};
-const lv=(v,t)=>{if(!ok(v))return"";const r=v/t;return r>=.9?"":r>=.8?"warn":"miss"};
-const ahtC=v=>ok(v)&&v>920?"miss":"";
-const xfC=v=>ok(v)&&v<.55?"red":"";
+// Uniform red rule: strictly below target (or above, for AHT and transfers)
+const below=(v,t)=>ok(v)&&v<t?"miss":"";
+const above=(v,t)=>ok(v)&&v>t?"miss":"";
 const row3=(a,b,c,m)=>`<tr${m?' class="'+m+'"':''}><td>${a}</td><td class="v">${b}</td>${c===undefined?"":`<td class="v">${c}</td>`}</tr>`;
 const badge=q=>q===null?"—":`<span class="${q?"yes":"no"}">${q?"YES":"NO"}</span>`;
+const kpiAmt=p=>p>=.95?5250:p>=.9?5000:p>=.87?4500:p>=.85?2500:p>=.8?1975:0;
+const raw={};   // text typed in a day field, kept while it is being edited so "21." and empty fields survive a redraw
+const inp=(id,v)=>`<input class="edit" type="text" inputmode="decimal" id="${id}" value="${raw[id]!==undefined?raw[id]:v}">`;
 function render(){
-document.getElementById("agent").textContent=AGENT;
+g("agent").textContent=AGENT;
+const xf=num("Voice Handled Transfer % (calibrated)");
 const ans=num("Voice Answered"),aht=num("Voice Answered AHT"),csat=num("Voice CSAT"),fcr=num("Voice FCR"),res=num("Voice Agent Resolution"),take=num("Voice Answered Take Rate (calibrated)"),trf=num("Voice Answered Transfer to Survey % (calibrated)"),pay=num("Status - Pay to Performance"),book=num("Revenue - Bookings (Post Recoup)"),acq=num("Revenue - ACQ + CROSS (Post Recoup)"),ren=num("Revenue - REN (Post Recoup)");
-document.getElementById("mtd").innerHTML="<thead><tr><th>METRIC</th><th style='text-align:right'>SCORE</th></tr></thead><tbody>"+
-row3("CALLS",N(ans))+row3("AHT",N(aht),undefined,ahtC(aht))+row3("CSAT",N(csat,2),undefined,lv(csat,4.93))+row3("VRR",P(res),undefined,lv(res,.94))+row3("FCR",P(fcr))+row3("TAKE RATE",P(take),undefined,lv(take,.33))+row3("XFER TO SURVEY",P(trf),undefined,xfC(trf))+row3("TRANSFERS%",P(num("Voice Handled Transfer % (calibrated)")))+row3("P2P",P(pay),undefined,lv(pay,.83))+"</tbody>";
+g("mtd").innerHTML="<thead><tr><th>METRIC</th><th style='text-align:right'>SCORE</th></tr></thead><tbody>"+
+row3("CALLS",N(ans))+row3("AHT",N(aht),undefined,above(aht,T.aht))+row3("CSAT",N(csat,2),undefined,below(csat,T.csat))+row3("VRR",P(res),undefined,below(res,T.vrr))+row3("FCR",P(fcr))+row3("TAKE RATE",P(take),undefined,below(take,T.take))+row3("XFER TO SURVEY",P(trf),undefined,below(trf,T.xferSurveyMin))+row3("TRANSFERS%",P(xf),undefined,above(xf,T.xferMax))+row3("P2P",P(pay),undefined,below(pay,T.p2p))+"</tbody>";
 const tot=ok(acq)&&ok(ren)?acq+ren:NaN,pc=ok(acq)&&ok(ans)&&ans?acq/ans:NaN;
-const miss=ok(pc)?(pc<9?9*ans-acq:0):NaN;
+const miss=ok(pc)?(pc<T.acq?T.acq*ans-acq:0):NaN;
 let inc=NaN;if(ok(book)){inc=0;const K=[500,1000,2000,3000,3500,4000,4500,5000,5500,6000,6500,7000],V=[1750,3250,4750,5000,5100,5250,5750,6250,6500,7000,7500,8000];K.forEach((k,i)=>{if(book>=k)inc=V[i]})}
 const kick=ok(book)?Math.round(Math.max(book-7000,0)*0.035*60.59*100)/100:NaN;
-const q1=ok(take)&&ok(csat)&&ok(pc)?(take>=.33&&csat>=4.9&&pc>=9):null;
-document.getElementById("sales").innerHTML="<thead><tr><th>METRIC</th><th style='text-align:right'>VALUE</th></tr></thead><tbody>"+
+const q1=ok(take)&&ok(csat)&&ok(pc)?(take>=T.take&&csat>=T.csat&&pc>=T.acq):null;
+g("sales").innerHTML="<thead><tr><th>METRIC</th><th style='text-align:right'>VALUE</th></tr></thead><tbody>"+
 row3("ACQ",$(acq))+row3("RENEWAL",$(ren))+row3("TOTAL",$(tot))+
-row3("$/CALL",$(pc),undefined,lv(pc,9))+row3("Missing ACQ (target $9/call)",$(miss),undefined,lv(pc,9))+row3("INCENTIVES",$(inc))+row3("KICKER",$(kick))+row3("QUALIFIED?",badge(q1))+"</tbody>";
-const s=[sc.aht(aht),sc.csat(csat),sc.res(res),sc.trf(num("Voice Handled Transfer % (calibrated)")),sc.pay(pay)];
+row3("$/CALL",$(pc),undefined,below(pc,T.acq))+row3("Missing ACQ (target $"+T.acq+"/call)",$(miss),undefined,below(pc,T.acq))+row3("INCENTIVES",$(inc))+row3("KICKER",$(kick))+row3("QUALIFIED?",badge(q1))+"</tbody>";
+const s=[sc.aht(aht),sc.csat(csat),sc.res(res),sc.trf(xf),sc.pay(pay)];
 const abn=n=>n===0?1:n===1?.75:n===2?.5:0;
-const s7=s.concat([abn(days.a),abn(days.l)]);
-const pcnt=s7.every(ok)?s[1]*.2+s[0]*.25+s[2]*.25+s[4]*.15+s[3]*.05+s7[5]*.05+s7[6]*.05:NaN;
-const mult=days.s?days.w/days.s:NaN;
-const q2=ok(take)&&ok(csat)&&ok(pc)?(take>=.33&&csat>=4.9&&pc>=9):null;
-const sp=v=>ok(v)?Math.round(v*100)+"%":"—";
-const ab=n=>n===0?"100%":n===1?"75%":n===2?"50%":"0%";
-document.getElementById("kpi").innerHTML="<thead><tr><th>METRIC</th><th style='text-align:right'>ACTUAL</th><th style='text-align:right'>SCORE</th></tr></thead><tbody>"+
-`<tr><td>Days Worked</td><td class="v" colspan="2"><input class="edit" type="number" min="0" id="dw" value="${days.w}"></td></tr>`+
-`<tr><td>Days Scheduled</td><td class="v" colspan="2"><input class="edit" type="number" min="0" id="ds" value="${days.s}"></td></tr>`+
-row3("AHT",N(aht),sp(s[0]),ahtC(aht))+row3("CSAT",N(csat,2),sp(s[1]),lv(csat,4.93))+row3("VRR",P(res),sp(s[2]),lv(res,.94))+row3("TRANSFER%",P(num("Voice Handled Transfer % (calibrated)")),sp(s[3]))+row3("P2P",P(pay),sp(s[4]),lv(pay,.83))+
-`<tr><td>ABSENCE</td><td class="v"><input class="edit" type="number" min="0" id="da" value="${days.a}"></td><td class="v">${ab(days.a)}</td></tr>`+`<tr><td>LATE</td><td class="v"><input class="edit" type="number" min="0" id="dl" value="${days.l}"></td><td class="v">${ab(days.l)}</td></tr>`+row3("MULTIPLIER","",sp(mult))+row3("PERCENTAGE","",sp(pcnt))+row3("INITIAL KPI","",$((p=>ok(p)?(p>=.95?5250:p>=.9?5000:p>=.87?4500:p>=.85?2500:p>=.8?1975:0):NaN)(Math.round(pcnt*1e6)/1e6)))+row3("FINAL KPI","",$((p=>ok(p)&&ok(mult)?mult*(p>=.95?5250:p>=.9?5000:p>=.87?4500:p>=.85?2500:p>=.8?1975:0):NaN)(Math.round(pcnt*1e6)/1e6)))+row3("QUALIFIED?","",badge(q2))+"</tbody>";
-const dw=document.getElementById("dw"),ds=document.getElementById("ds");
-dw.oninput=()=>{days.w=parseFloat(dw.value)||0;save("d");render();document.getElementById("dw").focus()};
-ds.oninput=()=>{days.s=parseFloat(ds.value)||0;save("d");render();document.getElementById("ds").focus()};
-document.getElementById("da").oninput=e=>{days.a=Math.max(0,parseInt(e.target.value)||0);save("d");render();document.getElementById("da").focus()};
-document.getElementById("dl").oninput=e=>{days.l=Math.max(0,parseInt(e.target.value)||0);save("d");render();document.getElementById("dl").focus()};
+const pcnt=s.every(ok)?s[1]*.2+s[0]*.25+s[2]*.25+s[4]*.15+s[3]*.05+abn(days.a)*.05+abn(days.l)*.05:NaN;
+const mult=days.s?Math.min(1,days.w/days.s):NaN;   // capped at 100%
+const pr=Math.round(pcnt*1e6)/1e6;
+const initial=ok(pr)?kpiAmt(pr):NaN;
+const q2=ok(pr)?initial>0:null;   // KPI qualified = reaches the lowest payout band
+const sp=v=>ok(v)?(v*100).toFixed(2)+"%":"—";
+const ab=n=>sp(abn(n));
+g("kpi").innerHTML="<thead><tr><th>METRIC</th><th style='text-align:right'>ACTUAL</th><th style='text-align:right'>SCORE</th></tr></thead><tbody>"+
+`<tr><td>Days Worked</td><td class="v" colspan="2">${inp("dw",days.w)}</td></tr>`+
+`<tr><td>Days Scheduled</td><td class="v" colspan="2">${inp("ds",days.s)}</td></tr>`+
+row3("AHT",N(aht),sp(s[0]),above(aht,T.aht))+row3("CSAT",N(csat,2),sp(s[1]),below(csat,T.csat))+row3("VRR",P(res),sp(s[2]),below(res,T.vrr))+row3("TRANSFER%",P(xf),sp(s[3]),above(xf,T.xferMax))+row3("P2P",P(pay),sp(s[4]),below(pay,T.p2p))+
+`<tr><td>ABSENCE</td><td class="v">${inp("da",days.a)}</td><td class="v">${ab(days.a)}</td></tr>`+`<tr><td>LATE</td><td class="v">${inp("dl",days.l)}</td><td class="v">${ab(days.l)}</td></tr>`+
+row3("MULTIPLIER","",sp(mult))+row3("PERCENTAGE","",sp(pcnt))+row3("INITIAL KPI","",$(initial))+row3("FINAL KPI","",$(ok(initial)&&ok(mult)?mult*initial:NaN))+row3("QUALIFIED?","",badge(q2))+"</tbody>";
+[["dw","w",v=>Math.max(0,parseFloat(v)||0)],["ds","s",v=>Math.max(0,parseFloat(v)||0)],["da","a",v=>Math.max(0,parseInt(v)||0)],["dl","l",v=>Math.max(0,parseInt(v)||0)]].forEach(([id,key,conv])=>{
+ const el=g(id);
+ el.oninput=()=>{const pos=el.selectionStart;raw[id]=el.value;days[key]=conv(el.value);save("d");render();const n=g(id);n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}};
+ el.onchange=()=>{delete raw[id];el.value=days[key]}});
 }
 const colName=c=>{let s="";c++;while(c>0){const m=(c-1)%26;s=String.fromCharCode(65+m)+s;c=Math.floor((c-1)/26)}return s};
 function grid(){
@@ -152,25 +160,23 @@ let h="<table><thead><tr><th></th>";
 for(let c=0;c<C;c++)h+=`<th>${colName(c)}</th>`;
 h+="</tr></thead><tbody>";
 for(let r=0;r<R;r++){h+=`<tr><td class="n">${r+1}</td>`;for(let c=0;c<C;c++){const v=(data[r]&&data[r][c])||"";h+=`<td contenteditable="true" data-r="${r}" data-c="${c}">${String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`}h+="</tr>"}
-document.getElementById("sheet").innerHTML=h+"</tbody></table>";
+g("sheet").innerHTML=h+"</tbody></table>";
 }
-const sheet=document.getElementById("sheet");
+const sheet=g("sheet");
 sheet.addEventListener("input",e=>{const t=e.target;if(!t.dataset||t.dataset.r===undefined)return;const r=+t.dataset.r,c=+t.dataset.c;while(data.length<=r)data.push([]);data[r][c]=t.textContent;save("x");render()});
 sheet.addEventListener("paste",e=>{const t=e.target.closest("td[data-r]");if(!t)return;e.preventDefault();
-const txt=(e.clipboardData||window.clipboardData).getData("text");
 const rows=clipRows(e);
 const r0=+t.dataset.r,c0=+t.dataset.c;
 if(r0===0&&c0===0)data=[];
 rows.forEach((cells,i)=>{while(data.length<=r0+i)data.push([]);cells.forEach((v,j)=>{data[r0+i][c0+j]=v.trim()})});
 save("x");grid();render()});
-const modal=document.getElementById("modal");
-document.getElementById("fab").onclick=()=>{grid();modal.classList.add("on")};
-document.getElementById("close").onclick=()=>{modal.classList.remove("on");render()};
-document.getElementById("clear").onclick=()=>{data=[[]];save("x");grid();render()};
+const modal=g("modal");
+g("fab").onclick=()=>{grid();modal.classList.add("on")};
+g("close").onclick=()=>{modal.classList.remove("on");render()};
+g("clear").onclick=()=>{data=[[]];save("x");grid();render()};
 modal.addEventListener("click",e=>{if(e.target===modal){modal.classList.remove("on");render()}});
 
 /* ---------- Shared helpers ---------- */
-const g=id=>document.getElementById(id);
 function parseTSV(t){const rows=[];let row=[],f="",q=false;t=t.replace(/\r/g,"");
 for(let i=0;i<t.length;i++){const ch=t[i];
  if(q){if(ch==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=ch}
@@ -214,33 +220,37 @@ let xRows=30,xCols=40;
 const grow=(el,redraw,r,c)=>{const t=el.scrollTop,l=el.scrollLeft;xRows+=r;xCols+=c;redraw();el.scrollTop=t;el.scrollLeft=l};
 
 /* ---------- CSAT VIEW (single agent) ---------- */
-const CS={csat:4.93,take:.33,vrr:.94,fcr:.88};
+const CS={csat:T.csat,take:T.take,vrr:.94,fcr:.88};
 const FCRN=["Yes. resolved in one interaction","Yes. but it took more than one interaction.","No. this is my first interaction and it is not resolved.","No. I have contacted you more than once and it is still not resolved."].map(norm);
 let cs={surveys:[],calls:[]},csLocalTs=0,csTab="surveys";
 try{const d=JSON.parse(localStorage.getItem("ps_cs")||"null");if(d){cs.surveys=d.surveys||[];cs.calls=d.calls||[];csLocalTs=+d.ts||0}}catch(e){}
 const csSave=()=>{csLocalTs=Date.now();try{localStorage.setItem("ps_cs",JSON.stringify({surveys:cs.surveys,calls:cs.calls,ts:csLocalTs}))}catch(e){}};
 function csRender(){
 g("csName").textContent=AGENT;
-let q1s=0,q1n=0,q2s=0,q2n=0,f=[0,0,0,0],seen=0;
+// Each survey's CSAT = average of the Knowledge and Courtesy scores it has (a lone score counts as is);
+// the CSAT shown is the average of those per-survey values.
+let sumA=0,n=0,q1s=0,q1n=0,q2s=0,q2n=0,f=[0,0,0,0],seen=0;
 const hs=(cs.surveys[0]||[]).map(norm),ai=hs.indexOf("agentname"),ki=hs.indexOf("knowledgeablerating"),ci=hs.indexOf("courteousrating"),fi=hs.indexOf("fcrvalue");
 if(ai>=0)for(let r=1;r<cs.surveys.length;r++){const row=cs.surveys[r]||[];if(!isMe(row[ai]))continue;seen++;
- if(ki>=0){const v=parseFloat(row[ki]);if(ok(v)){q1s+=v;q1n++}}
- if(ci>=0){const v=parseFloat(row[ci]);if(ok(v)){q2s+=v;q2n++}}
+ const k=ki>=0?parseFloat(row[ki]):NaN,c=ci>=0?parseFloat(row[ci]):NaN,hk=ok(k),hc=ok(c);
+ if(hk){q1s+=k;q1n++}
+ if(hc){q2s+=c;q2n++}
+ if(hk||hc){sumA+=hk&&hc?(k+c)/2:hk?k:c;n++}
  if(fi>=0){const j=FCRN.indexOf(norm(row[fi]));if(j>=0)f[j]++}}
 // Calls tab: Agent Name + Calls; if empty, falls back to Voice Answered from the main data sheet
-const hc=(cs.calls[0]||[]).map(norm);let nc=hc.indexOf("agentname");if(nc<0)nc=hc.indexOf("name");if(nc<0)nc=0;
-let cc=-1;["calls","voiceanswered","numberofcalls"].some(k=>(cc=hc.indexOf(k))>=0);if(cc<0)cc=1;
+const hcs=(cs.calls[0]||[]).map(norm);let nc=hcs.indexOf("agentname");if(nc<0)nc=hcs.indexOf("name");if(nc<0)nc=0;
+let cc=-1;["calls","voiceanswered","numberofcalls"].some(k=>(cc=hcs.indexOf(k))>=0);if(cc<0)cc=1;
 let calls=NaN;cs.calls.forEach(row=>{if(!isMe((row||[])[nc]))return;const v=parseFloat(String(row[cc]==null?"":row[cc]).replace(/,/g,""));if(ok(v))calls=(ok(calls)?calls:0)+v});
 if(!ok(calls))calls=num("Voice Answered");
-const avg=(s,n)=>n?s/n:NaN,r2=v=>ok(v)?Math.round((v+1e-9)*100)/100:NaN;   // round half up (4.896 -> 4.90)
-const a1=avg(q1s,q1n),a2=avg(q2s,q2n),csat=r2(ok(a1)&&ok(a2)?(a1+a2)/2:NaN),take=ok(calls)&&calls>0?q1n/calls:NaN;
+const avg=(s,m)=>m?s/m:NaN,r2=v=>ok(v)?Math.round((v+1e-9)*100)/100:NaN;   // round half up (4.896 -> 4.90)
+const a1=avg(q1s,q1n),a2=avg(q2s,q2n),csat=r2(avg(sumA,n)),take=ok(calls)&&calls>0?n/calls:NaN;
 const t=f[0]+f[1]+f[2]+f[3],fcr=t?f[0]/t:NaN,vrr=t?(f[0]+f[1])/t:NaN;
 const need=!t||fcr>=CS.fcr?"—":N(Math.ceil(Number(((CS.fcr*t-f[0])/(1-CS.fcr)).toFixed(9))));
 const bad=(v,x)=>ok(v)&&v<x,c=(v,fl)=>`<td class="v${fl?" bad":""}">${v}</td>`;
 const tb=(cls,heads,cells)=>`<div class="scroll"><table class="cst ${cls}"><thead><tr>${heads.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody><tr>${cells.join("")}</tr></tbody></table></div>`;
 g("csTables").innerHTML=
-`<div class="card"><h3>CSAT &amp; TAKE RATE</h3>${tb("",["CALLS","SURVEY","Q1","Q2","CSAT","TAKE RATE"],[c(N(calls)),c(N(q1n)),c(N(r2(a1),2)),c(N(r2(a2),2)),c(N(csat,2),bad(csat,CS.csat)),c(P(take),bad(take,CS.take))])}</div>`+
-`<div class="card"><h3>FCR &amp; VRR</h3>${tb("wide",["Q1","Q2","Q3","Q4","VRR","FCR","SURVEYS NEEDED"],[...f.map(n=>c(n?N(n):"")),c(P(vrr),bad(vrr,CS.vrr)),c(P(fcr),bad(fcr,CS.fcr)),c(need)])}</div>`;
+`<div class="card"><h3>CSAT &amp; TAKE RATE</h3>${tb("",["CALLS","SURVEY","Q1","Q2","CSAT","TAKE RATE"],[c(N(calls)),c(N(n)),c(N(r2(a1),2)),c(N(r2(a2),2)),c(N(csat,2),bad(csat,CS.csat)),c(P(take),bad(take,CS.take))])}</div>`+
+`<div class="card"><h3>FCR &amp; VRR</h3>${tb("wide",["Q1","Q2","Q3","Q4","VRR","FCR","SURVEYS NEEDED"],[...f.map(x=>c(x?N(x):"")),c(P(vrr),bad(vrr,CS.vrr)),c(P(fcr),bad(fcr,CS.fcr)),c(need)])}</div>`;
 g("csNote").textContent=cs.surveys.length<=1?"No survey data yet. Tap the book button and paste the survey sheet.":(ai<0||ki<0||ci<0||fi<0)?"Survey columns not found. Paste with headers in row 1 (Agent Name, Knowledgeable rating, Courteous rating, FCR value).":!seen?"No survey rows found for Jeddah (looking for a name containing “jeddah” and “descartin”).":"";
 }
 function csGrid(){
@@ -266,10 +276,11 @@ if(r0===0&&c0===0)arr.length=0;
 rows.forEach((cells,i)=>{while(arr.length<=r0+i)arr.push([]);cells.forEach((v,j)=>{arr[r0+i][c0+j]=String(v).trim()})});
 csSave();csGrid();csRender()});
 g("csClear").onclick=()=>{if(!confirm("Clear the "+csTab+" data? Viewers keep the old file until you export again."))return;cs[csTab]=[];csSave();csGrid();csRender()};
-// Export keeps only Jeddah's rows and the 4 columns the tables need
+// Export keeps only Jeddah's rows and the 4 columns the tables need; refuses to export if a column is missing
 function csSlim(){const h=cs.surveys[0]||[],ni=h.findIndex(x=>norm(x)==="agentname"),idx=["agentname","knowledgeablerating","courteousrating","fcrvalue"].map(w=>h.findIndex(x=>norm(x)===w));
-if(idx.some(i=>i<0))return cs.surveys;return cs.surveys.filter((r,i)=>i===0||isMe((r||[])[ni])).map(r=>idx.map(i=>(r||[])[i]==null?"":r[i]))}
-g("csExport").onclick=()=>download({updated:Date.now(),surveys:csSlim(),calls:cs.calls.filter((r,i)=>i===0||(r||[]).some(isMe))},"csat.json","Everyone sees the update within a minute or two of opening the page.");
+if(idx.some(i=>i<0))return null;return cs.surveys.filter((r,i)=>i===0||isMe((r||[])[ni])).map(r=>idx.map(i=>(r||[])[i]==null?"":r[i]))}
+g("csExport").onclick=()=>{const s=csSlim();if(!s){alert("Survey columns not found (Agent Name, Knowledgeable rating, Courteous rating, FCR value), so nothing was exported. Fix the headers in row 1 first.");return}
+download({updated:Date.now(),surveys:s,calls:cs.calls.filter((r,i)=>i===0||(r||[]).some(isMe))},"csat.json","Everyone sees the update within a minute or two of opening the page.")};
 function loadCsat(){
 if(location.protocol==="file:")return;
 fetch("csat.json?v="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.json():null).then(j=>{
